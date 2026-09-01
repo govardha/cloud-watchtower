@@ -21,3 +21,6 @@ Also these can only write in and cannot delete objects. Hopefully the apps will 
 if names are being reused.
 
 There could also be a case where I can have a kube-prometheus-stack which has loki which may be able to consume logs from this bucket if there is a need for it
+
+I have a particular style of doing cdk python deployment first off I need to create a new cdk shortcode to bootstrap this repo, my stylin preference
+can be found here ../../cluster-cauldron/infra/eks/cdk/README.md
