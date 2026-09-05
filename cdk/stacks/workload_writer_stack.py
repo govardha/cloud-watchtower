@@ -64,19 +64,19 @@ class WorkloadWriterStack(Stack):
         # EKS Pod Identity needs both AssumeRole + TagSession.
         role.assume_role_policy.add_statements(
             iam.PolicyStatement(
-                sid="eks-pod-identity",
+                sid="EksPodIdentity",
                 effect=iam.Effect.ALLOW,
                 principals=[iam.ServicePrincipal("pods.eks.amazonaws.com")],
                 actions=["sts:AssumeRole", "sts:TagSession"],
             ),
             iam.PolicyStatement(
-                sid="ecs-task-role",
+                sid="EcsTaskRole",
                 effect=iam.Effect.ALLOW,
                 principals=[iam.ServicePrincipal("ecs-tasks.amazonaws.com")],
                 actions=["sts:AssumeRole"],
             ),
             iam.PolicyStatement(
-                sid="lambda-execution-role",
+                sid="LambdaExecutionRole",
                 effect=iam.Effect.ALLOW,
                 principals=[iam.ServicePrincipal("lambda.amazonaws.com")],
                 actions=["sts:AssumeRole"],
