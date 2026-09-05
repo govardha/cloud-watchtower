@@ -1,0 +1,13 @@
+# CDK / Python
+.venv/
+__pycache__/
+*.pyc
+cdk.out/
+cdk.context.json
+
+# OS
+.DS_Store
+
+# Local env (secrets/overrides) — but DO track the example
+.env
+!.env.example
