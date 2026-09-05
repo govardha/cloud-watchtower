@@ -8,7 +8,8 @@ Application Logging includes and is not limited Application
 3. ECS logging
 4. Baremetal apps running on EC2 logging
 
-For EKS I have rough contours of partionining logic which I will include in the future.
+For EKS I have rough contours of partionining logic which I will include in the future. Look at ../../cluster-cauldron/apps/app-of-apps/children/splunk-otel/README.md and the contents of this kube-prometheus-stack
+I plan to spin up splunk otel which will scrape logs and then further ship it to fluent bit which will then finally ship it to this S3 bucket.
 
 Read the @cribl-s3.md which tells you how cribl is going to ingest the logs and further ship it to on-prem splunk.
 
@@ -19,4 +20,7 @@ will allow stuff to be able to write to it.
 Also these can only write in and cannot delete objects. Hopefully the apps will not collide and if it does it should get an error
 if names are being reused.
 
-There could also be a case where I can have a kube-prometheus-stack which has loki which may be able to consume logs from this bucket
+There could also be a case where I can have a kube-prometheus-stack which has loki which may be able to consume logs from this bucket if there is a need for it
+
+I have a particular style of doing cdk python deployment first off I need to create a new cdk shortcode to bootstrap this repo, my stylin preference
+can be found here ../../cluster-cauldron/infra/eks/cdk/README.md
