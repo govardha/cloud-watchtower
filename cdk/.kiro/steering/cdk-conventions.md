@@ -22,6 +22,9 @@ Follow these when writing or changing Python/CDK code in this repo.
   and readable (`watchtower-logarchive-<short>`, `watchtower-writer-<account>`).
 - One `LogArchiveStack` **per region**; one `WorkloadWriterStack` **per
   account**. Keep that shape.
+- `HomelabWriterStack` is the non-EKS path: a single IAM **user** in the
+  logarchive account (no role, no cross-account trust), write-only into a fixed
+  literal prefix (`homelab/cauldron`). Never create its access key in CDK.
 - The Cribl reader role is created **only in the primary region** stack
   (`is_primary`). IAM is global — do not duplicate it per region.
 - Prefer deterministic ARNs (bucket/queue names are patterned) over

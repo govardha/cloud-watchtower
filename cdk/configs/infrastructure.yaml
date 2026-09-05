@@ -1,0 +1,93 @@
+# ---------------------------------------------------------------------------
+# cloud-watchtower infrastructure config — globals + per-account overrides.
+#
+# HOW THE MERGE WORKS (see configs/config.py):
+#   final = deep_merge(globals, accounts[<account_name>])   # account wins
+#   - Scalars override individually.
+#   - Lists REPLACE wholesale when an account specifies its own.
+#
+# Account IDs + org id are ALSO in cdk.json `context` (super-fiesta style); the
+# loader reads them from there and only falls back to ${ENV} tokens. Account
+# IDs are NOT secrets (from `aws organizations list-accounts`).
+#
+# One account is selected at synth time (-c account=<name> or WATCHTOWER_ACCOUNT):
+#   logarchive                     -> the log_archive block is used
+#   sandbox|development|production  -> the writer block is used
+# ---------------------------------------------------------------------------
+
+globals:
+  log_archive:
+    bucket_name_pattern: "watchtower-logarchive-{region}-{account_id}"
+    regions:
+      - "us-east-1"
+      - "us-east-2"
+    region_short_codes:
+      us-east-1: "ue1"
+      us-east-2: "ue2"
+    lifecycle_expiration_days: 30          # toss ALL objects at 30 days
+    abort_incomplete_multipart_days: 7     # cost hygiene (orphaned parts)
+    sse: "S3"                              # AES256; SSE-KMS is the work upgrade
+    versioning: false
+    org_id: "o-x82cglkqhs"
+    reader:
+      role_name: "watchtower-cribl-reader"
+      cribl_user_arn: "arn:aws:iam::698777852125:user/cribl-servicaccount"
+      external_id: "watchtower-2675e497-b719-409b-b81a-57e9ca59976e"
+      queue_visibility_seconds: 300
+      queue_retention_seconds: 1209600     # 14 days
+      dlq_max_receive_count: 5
+      raw_message_delivery: true
+
+  writer:
+    role_name_pattern: "watchtower-writer-{account}"
+    bucket_name_pattern: "watchtower-logarchive-{region}-{account_id}"
+    logarchive_account_id: "766997230140"
+    target_regions:
+      - "us-east-1"
+      - "us-east-2"
+
+  # Home-lab (k3s) side: a single IAM USER in the logarchive account. No AWS
+  # account behind the cluster, so no cross-account role/AssumeRole — the
+  # user's identity policy alone grants write-only into a FIXED literal prefix.
+  # Access key is minted post-deploy (never in CDK). See plan.md §5.
+  homelab:
+    user_name: "watchtower-writer-home"
+    prefix: "homelab/cauldron"
+    bucket_name_pattern: "watchtower-logarchive-{region}-{account_id}"
+    logarchive_account_id: "766997230140"
+    target_regions:
+      - "us-east-1"
+
+accounts:
+  # -------------------------------------------------------------------------
+  # LOGARCHIVE — owns the buckets, SNS, SQS, and the Cribl reader role.
+  # -------------------------------------------------------------------------
+  - name: logarchive
+    account: "${LOGARCHIVE_ACCOUNT_ID}"
+    region: "us-east-1"
+
+  # -------------------------------------------------------------------------
+  # WORKLOAD ACCOUNTS — one shared writer role each. Same shape; only the
+  # account id in the identity-policy Resource ARN differs (rendered in CDK).
+  # -------------------------------------------------------------------------
+  - name: sandbox
+    account: "${SANDBOX_ACCOUNT_ID}"
+    region: "us-east-1"
+
+  - name: development
+    account: "${DEVELOPMENT_ACCOUNT_ID}"
+    region: "us-east-1"
+
+  - name: production
+    account: "${PRODUCTION_ACCOUNT_ID}"
+    region: "us-east-1"
+
+  # -------------------------------------------------------------------------
+  # HOMELAB — the k3s home cluster's writer. The IAM user is created IN the
+  # logarchive account (same account as the bucket), so `account` resolves to
+  # the logarchive id. Deployed via the admin-logarchive profile (Makefile
+  # special-cases this). One region: us-east-1.
+  # -------------------------------------------------------------------------
+  - name: homelab
+    account: "${LOGARCHIVE_ACCOUNT_ID}"
+    region: "us-east-1"
