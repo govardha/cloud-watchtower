@@ -13,7 +13,7 @@ role) into reusable, account-driven CDK.
 This is a **home-lab** deployment: there is **no CI/CD pipeline and no CDK
 Stage**. The only deploy path is `make deploy` (see `docs/plan.md` §8).
 
-## Two sides of the pipeline
+## Sides of the pipeline
 
 One account/side is selected at synth time via `-c account=<name>` or the
 `WATCHTOWER_ACCOUNT` env var. Exactly one side is produced:
@@ -21,7 +21,25 @@ One account/side is selected at synth time via `-c account=<name>` or the
 | account | stack(s) | what it owns |
 | --- | --- | --- |
 | `logarchive` | `LogArchiveStack` × 2 (one per region) | regional S3 buckets, bucket policy, SNS topic, SQS queue + DLQ, and (primary region only) the global `watchtower-cribl-reader` IAM role |
-| `sandbox` / `development` / `production` | `WorkloadWriterStack` × 1 | one shared, write-only IAM writer role for all compute (EKS Pod Identity / EC2 / ECS / Lambda) |
+| `sandbox` / `development` / `production` | `WorkloadWriterStack` × 1 | one shared, write-only IAM writer **role** for all compute (EKS Pod Identity / EC2 / ECS / Lambda), cross-account, account-id-keyed prefix |
+| `homelab` | `HomelabWriterStack` × 1 | one write-only IAM **user** in the logarchive account for the k3s home cluster (`cauldron`) — no role, no cross-account trust; access key minted post-deploy |
+
+### Why homelab is different (not symmetric with the EKS writers)
+
+The `sandbox`/`development`/`production` writers are EKS-in-AWS: they assume a
+cross-account **role** via Pod Identity and write into an `<account_id>/`
+prefix (keyed on `aws:PrincipalAccount`). The home cluster has **no AWS
+account** behind it, so:
+
+- It authenticates as a same-account IAM **user** (`watchtower-writer-home`)
+  living in the logarchive account — the user's identity policy alone grants
+  access (no role/AssumeRole; there's no account boundary to cross).
+- The prefix is a **fixed literal** (`homelab/cauldron`), not an account id.
+- The access key is **not** created by CDK (keys in CloudFormation leak the
+  secret). Mint it once post-deploy:
+  `aws iam create-access-key --user-name watchtower-writer-home --profile admin-logarchive`.
+- Deploys via `make deploy ACCOUNT=homelab`, which the Makefile routes through
+  the `admin-logarchive` profile (the user lives there).
 
 IAM is global, so the Cribl reader role is created exactly **once**, in the
 primary region's stack (`us-east-1`). Bucket names are deterministic
@@ -41,7 +59,8 @@ cdk/
     models.py                 # dataclasses hydrated by dacite
   stacks/
     log_archive_stack.py      # logarchive side (per region)
-    workload_writer_stack.py  # workload side (per account)
+    workload_writer_stack.py  # EKS workload side (per account, cross-account role)
+    homelab_writer_stack.py   # home-lab side (IAM user in logarchive account)
   utils/
     converters.py             # deep-merge helper
     logger.py                 # structured logging
