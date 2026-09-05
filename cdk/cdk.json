@@ -1,0 +1,29 @@
+{
+  "app": "python3 app.py",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "requirements*.txt",
+      "**/__init__.py",
+      "**/__pycache__",
+      "tests"
+    ]
+  },
+  "context": {
+    "@aws-cdk/core:bootstrapQualifier": "watchtwr26",
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
+    "@aws-cdk/core:target-partitions": ["aws"],
+    "deployment_account_id": "766789219588",
+    "deployment_account_region": "us-east-1",
+    "logarchive_account_id": "766997230140",
+    "audit_account_id": "698777852125",
+    "sandbox_account_id": "621648307412",
+    "development_account_id": "304232106942",
+    "production_account_id": "953293104741",
+    "org_id": "o-x82cglkqhs"
+  }
+}
