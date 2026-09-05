@@ -6,8 +6,9 @@
 #   * `cdk diff` gate before deploy
 #   * destroy requires explicit scope restatement (CONFIRM=<account>)
 #
-# Pick the target with ACCOUNT (logarchive | sandbox | development | production).
-# The matching AWS SSO profile is admin-<ACCOUNT> in your ~/.aws/config.
+# Pick the target with ACCOUNT (logarchive | sandbox | development | production | homelab).
+# The matching AWS SSO profile is admin-<ACCOUNT> in your ~/.aws/config
+# (except homelab, which deploys via admin-logarchive — its user lives there).
 #
 # Deploy path is `make deploy` ONLY — there is no pipeline (home lab; see
 # docs/plan.md §8). Fresh bootstrap qualifier: watchtwr26.
@@ -21,7 +22,13 @@
 # ---------------------------------------------------------------------------
 
 ACCOUNT      ?= logarchive
+# The homelab IAM user is created IN the logarchive account, so it deploys via
+# the admin-logarchive profile (not a non-existent admin-homelab).
+ifeq ($(ACCOUNT),homelab)
+AWS_PROFILE  := admin-logarchive
+else
 AWS_PROFILE  := admin-$(ACCOUNT)
+endif
 QUALIFIER    := watchtwr26
 TOOLKIT      := CDKToolkit-$(QUALIFIER)
 DEPLOY_ACCT  := 766789219588
@@ -37,7 +44,7 @@ export AWS_PROFILE
 help:
 	@echo "Targets: whoami | venv | synth | diff | deploy | destroy"
 	@echo "         bootstrap | bootstrap-deployment"
-	@echo "Set ACCOUNT=logarchive|sandbox|development|production (default: logarchive)"
+	@echo "Set ACCOUNT=logarchive|sandbox|development|production|homelab (default: logarchive)"
 	@echo "destroy also requires CONFIRM=<account>"
 
 venv:

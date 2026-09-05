@@ -11,6 +11,7 @@ Ported from the super-fiesta pattern, adapted for cloud-watchtower:
 Which side of the pipeline is produced depends on the account name:
   - ``logarchive``                    -> InfrastructureSpec.log_archive
   - ``sandbox|development|production`` -> InfrastructureSpec.writer
+  - ``homelab``                       -> InfrastructureSpec.homelab
 """
 
 import json
@@ -23,6 +24,7 @@ from dacite import from_dict
 from dotenv import load_dotenv
 
 from configs.models import (
+    HomelabWriterConfig,
     InfrastructureSpec,
     LogArchiveConfig,
     WriterConfig,
@@ -36,11 +38,14 @@ _CONFIG_FILE = Path(__file__).parent / "infrastructure.yaml"
 _CDK_JSON = Path(__file__).parent.parent / "cdk.json"
 
 # Map profile name -> the ${ENV}/context key holding its account id.
+# 'homelab' resolves to the LOGARCHIVE account id: the IAM user is created in
+# the logarchive account (same account as the bucket).
 _ACCOUNT_ID_KEY = {
     "logarchive": "LOGARCHIVE_ACCOUNT_ID",
     "sandbox": "SANDBOX_ACCOUNT_ID",
     "development": "DEVELOPMENT_ACCOUNT_ID",
     "production": "PRODUCTION_ACCOUNT_ID",
+    "homelab": "LOGARCHIVE_ACCOUNT_ID",
 }
 
 # cdk.json context keys are lowercase (super-fiesta style); map the ${ENV}
@@ -144,6 +149,7 @@ class AppConfigs:
 
         log_archive_cfg = None
         writer_cfg = None
+        homelab_cfg = None
         if account_name == "logarchive":
             merged = update(
                 dict(globals_config.get("log_archive", {})),
@@ -151,6 +157,14 @@ class AppConfigs:
             )
             log_archive_cfg = from_dict(
                 data_class=LogArchiveConfig, data=merged
+            )
+        elif account_name == "homelab":
+            merged = update(
+                dict(globals_config.get("homelab", {})),
+                dict(account.get("homelab", {})),
+            )
+            homelab_cfg = from_dict(
+                data_class=HomelabWriterConfig, data=merged
             )
         else:
             merged = update(
@@ -165,4 +179,5 @@ class AppConfigs:
             profile_name=account_name,
             log_archive=log_archive_cfg,
             writer=writer_cfg,
+            homelab=homelab_cfg,
         )

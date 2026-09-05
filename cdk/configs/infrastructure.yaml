@@ -46,6 +46,18 @@ globals:
       - "us-east-1"
       - "us-east-2"
 
+  # Home-lab (k3s) side: a single IAM USER in the logarchive account. No AWS
+  # account behind the cluster, so no cross-account role/AssumeRole — the
+  # user's identity policy alone grants write-only into a FIXED literal prefix.
+  # Access key is minted post-deploy (never in CDK). See plan.md §5.
+  homelab:
+    user_name: "watchtower-writer-home"
+    prefix: "homelab/cauldron"
+    bucket_name_pattern: "watchtower-logarchive-{region}-{account_id}"
+    logarchive_account_id: "766997230140"
+    target_regions:
+      - "us-east-1"
+
 accounts:
   # -------------------------------------------------------------------------
   # LOGARCHIVE — owns the buckets, SNS, SQS, and the Cribl reader role.
@@ -68,4 +80,14 @@ accounts:
 
   - name: production
     account: "${PRODUCTION_ACCOUNT_ID}"
+    region: "us-east-1"
+
+  # -------------------------------------------------------------------------
+  # HOMELAB — the k3s home cluster's writer. The IAM user is created IN the
+  # logarchive account (same account as the bucket), so `account` resolves to
+  # the logarchive id. Deployed via the admin-logarchive profile (Makefile
+  # special-cases this). One region: us-east-1.
+  # -------------------------------------------------------------------------
+  - name: homelab
+    account: "${LOGARCHIVE_ACCOUNT_ID}"
     region: "us-east-1"

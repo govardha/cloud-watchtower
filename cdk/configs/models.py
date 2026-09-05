@@ -5,9 +5,10 @@ Mirrors the super-fiesta dataclass/dacite pattern. The YAML deep-merges a
 dacite hydrates these dataclasses. Everything is explicit — no ``latest`` and
 no magic defaults that hide intent.
 
-Two sides of the pipeline, selected by account name:
+Sides of the pipeline, selected by account name:
   * ``logarchive``                       -> LogArchiveConfig (bucket/SNS/SQS/reader)
   * ``sandbox|development|production``    -> WriterConfig (shared writer role)
+  * ``homelab``                          -> HomelabWriterConfig (IAM user, no role)
 """
 
 from dataclasses import dataclass, field
@@ -83,11 +84,41 @@ class WriterConfig:
 
 
 @dataclass
+class HomelabWriterConfig:
+    """The home-lab writer side: a single IAM *user* in the logarchive account.
+
+    Unlike ``WriterConfig`` (EKS-in-AWS, cross-account, account-id prefix), the
+    home-lab cluster has no AWS account. Its k3s workloads authenticate with a
+    long-lived access key belonging to a same-account IAM user, whose identity
+    policy alone grants write-only access into a FIXED literal prefix (there is
+    no ``aws:PrincipalAccount`` to key on). See docs/plan.md §5 (home-lab path).
+
+    The access key is NOT created here — keys in CloudFormation would leak the
+    secret into template/state/outputs. Mint it once post-deploy:
+        aws iam create-access-key --user-name <user_name> --profile admin-logarchive
+    """
+
+    user_name: str = "watchtower-writer-home"
+    # Literal S3 key prefix this user may write under (no delete anywhere).
+    prefix: str = "homelab/cauldron"
+    # Bucket(s) to target; must match LogArchiveConfig.bucket_name_pattern.
+    bucket_name_pattern: str = (
+        "watchtower-logarchive-{region}-{account_id}"
+    )
+    # The account that owns BOTH the bucket and this user (same-account grant).
+    logarchive_account_id: str = "766997230140"
+    target_regions: list[str] = field(
+        default_factory=lambda: ["us-east-1"]
+    )
+
+
+@dataclass
 class InfrastructureSpec:
     """Resolved (globals + account) spec handed to the stacks.
 
-    Exactly one of ``log_archive`` / ``writer`` is populated, based on which
-    account was selected (logarchive vs a workload account).
+    Exactly one of ``log_archive`` / ``writer`` / ``homelab`` is populated,
+    based on which account was selected (logarchive vs an EKS workload account
+    vs the home-lab side).
     """
 
     account: str
@@ -95,3 +126,4 @@ class InfrastructureSpec:
     profile_name: str
     log_archive: LogArchiveConfig | None = None
     writer: WriterConfig | None = None
+    homelab: HomelabWriterConfig | None = None

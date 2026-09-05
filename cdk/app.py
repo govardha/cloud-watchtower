@@ -16,6 +16,12 @@ configs/config.py).
       -> one WorkloadWriterStack (shared writer role):
            watchtower-writer-<account>
 
+  account=homelab
+      -> one HomelabWriterStack (a single IAM user in the logarchive account;
+         no role, no cross-account trust — the k3s home cluster authenticates
+         with a long-lived key minted post-deploy):
+           watchtower-writer-homelab
+
 Deploy path is ``make deploy`` ONLY — no pipeline, no CDK Stage (home lab; see
 docs/plan.md §8). Every stack pins an explicit ``stack_name`` so the
 CloudFormation names are fixed and readable.
@@ -26,6 +32,7 @@ import os
 import aws_cdk as cdk
 
 from configs.config import AppConfigs
+from stacks.homelab_writer_stack import HomelabWriterStack
 from stacks.log_archive_stack import LogArchiveStack
 from stacks.workload_writer_stack import WorkloadWriterStack
 
@@ -61,6 +68,16 @@ if account_name == "logarchive":
             is_primary=(region == PRIMARY_REGION),
             env=cdk.Environment(account=spec.account, region=region),
         )
+elif account_name == "homelab":
+    # Home-lab (k3s) writer: a single same-account IAM user in the logarchive
+    # account. No role, no cross-account trust — see stack docstring.
+    HomelabWriterStack(
+        app,
+        "HomelabWriter",  # construct id (internal)
+        stack_name="watchtower-writer-homelab",  # pinned CFN name
+        spec=spec,
+        env=cdk.Environment(account=spec.account, region=spec.region),
+    )
 else:
     # Workload account: the shared writer role is global (IAM), so a single
     # stack in the account's home region is enough.
