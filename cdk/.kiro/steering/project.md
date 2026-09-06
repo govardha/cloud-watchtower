@@ -80,7 +80,10 @@ cdk/
 
 ## Key facts (don't re-derive)
 
-- Regions: `us-east-1` (primary, `ue1`) and `us-east-2` (`ue2`).
+- Regions: `us-east-1` (primary, `ue1`) and `us-east-2` (`ue2`). The set is
+  config-driven (`infrastructure.yaml`) and can be narrowed at synth/deploy
+  time with `WATCHTOWER_REGIONS` / `make ... DEPLOY_REGIONS=` (subset only) —
+  e.g. a home lab that never bootstraps `us-east-2` runs `us-east-1` only.
 - Bootstrap qualifier: `watchtwr26`; toolkit stack `CDKToolkit-watchtwr26`.
 - Deployment (deployer) account: `766789219588`; logarchive account:
   `766997230140`; audit (Cribl user) account: `698777852125`.
