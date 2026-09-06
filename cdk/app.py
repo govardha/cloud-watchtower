@@ -56,8 +56,28 @@ def _short(region: str) -> str:
 
 
 if account_name == "logarchive":
+    # Region set is config-driven (infrastructure.yaml), but can be narrowed
+    # at synth/deploy time via WATCHTOWER_REGIONS (comma-separated) — e.g. a
+    # home-lab env that never bootstraps us-east-2 can run with just
+    # ``WATCHTOWER_REGIONS=us-east-1`` so the un-bootstrapped region's stack is
+    # never synthesized (and thus never breaks ``deploy``). An unknown region
+    # here is a config error, so fail loudly rather than silently skipping.
+    _configured = spec.log_archive.regions
+    _override = os.getenv("WATCHTOWER_REGIONS")
+    if _override:
+        requested = [r.strip() for r in _override.split(",") if r.strip()]
+        unknown = [r for r in requested if r not in _configured]
+        if unknown:
+            raise ValueError(
+                f"WATCHTOWER_REGIONS {unknown} not in configured regions "
+                f"{_configured}. Add them to infrastructure.yaml first."
+            )
+        regions = requested
+    else:
+        regions = _configured
+
     # One stack per region, each pinned to its own account+region environment.
-    for region in spec.log_archive.regions:
+    for region in regions:
         short = _short(region)
         LogArchiveStack(
             app,
