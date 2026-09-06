@@ -41,6 +41,11 @@ Follow these when writing or changing Python/CDK code in this repo.
   explicit delete deny as backstop.
 - Trust-policy `Sid`s must be **alphanumeric** (CloudFormation rejects others —
   see the fix commit on the scaffold branch).
+- **Bind `sts:ExternalId` to the principal at role creation** —
+  `ArnPrincipal(arn).with_conditions({"StringEquals": {"sts:ExternalId": ...}})`.
+  Never `assumed_by=ArnPrincipal(arn)` + a separate conditioned
+  `assume_role_policy.add_statements(...)`: the two ALLOWs are OR'd, so the
+  unconditioned one leaves the ExternalId unenforced (silent auth bypass).
 
 ## Stateful resources
 

@@ -70,6 +70,12 @@ make deploy  ACCOUNT=logarchive          # gates on whoami + diff, then deploy -
 make bootstrap ACCOUNT=logarchive        # one-time, both regions, qualifier watchtwr26
 make destroy ACCOUNT=logarchive CONFIRM=logarchive   # scope restatement required
 
+# Narrow which logarchive regions are synthesized/deployed (must be a subset of
+# infrastructure.yaml's regions). Use this when a region is intentionally never
+# bootstrapped (e.g. home lab runs us-east-1 only) so deploy --all won't fail on
+# the missing region's bootstrap SSM param:
+make deploy  ACCOUNT=logarchive DEPLOY_REGIONS=us-east-1
+
 make deploy  ACCOUNT=homelab             # creates the home-lab IAM user (via admin-logarchive)
 ```
 
@@ -97,6 +103,12 @@ Direct CDK (rarely needed): `cdk -c account=<name> synth`.
   no delete anywhere. Trust-policy `Sid`s must be **alphanumeric**. The
   home-lab writer is an IAM **user** (not a role), same rules: write-only,
   explicit resources, no delete.
+- **ExternalId must be bound to the principal at role creation** via
+  `ArnPrincipal(...).with_conditions({"StringEquals": {"sts:ExternalId": ...}})`.
+  Do **not** use bare `assumed_by=ArnPrincipal(...)` and then append a
+  conditioned statement with `assume_role_policy.add_statements(...)` — trust
+  statements are OR'd, so the unconditioned statement still permits assume and
+  the ExternalId is silently **not** enforced.
 - **Config, not literals:** new tunables go in `models.py` + `infrastructure.yaml`.
   Account IDs / org id live in `cdk.json` context — never hardcode in stacks.
 - **Python style:** ruff (Black-compatible), 88-char lines, double quotes,

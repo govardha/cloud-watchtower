@@ -177,28 +177,25 @@ class LogArchiveStack(Stack):
         # already covers this region's queue and the other region's queue.
         # ------------------------------------------------------------------
         if is_primary:
+            # ExternalId must be bound to the principal at creation time.
+            # Using `assumed_by=ArnPrincipal(...)` alone seeds an UNconditioned
+            # allow; appending a second conditioned statement does NOT enforce
+            # the ExternalId (trust statements are OR'd, so the unconditioned
+            # one still permits assume). Condition the principal so there is a
+            # single statement that requires the ExternalId. See git history.
             reader_role = iam.Role(
                 self,
                 "CriblReaderRole",
                 role_name=cfg.reader.role_name,
-                assumed_by=iam.ArnPrincipal(cfg.reader.cribl_user_arn),
+                assumed_by=iam.ArnPrincipal(
+                    cfg.reader.cribl_user_arn
+                ).with_conditions(
+                    {"StringEquals": {"sts:ExternalId": cfg.reader.external_id}}
+                ),
                 description=(
                     "Assumed by the audit-account Cribl service account to "
                     "read watchtower log-archive objects + SQS notifications."
                 ),
-            )
-            # Tighten the trust with the ExternalId condition.
-            reader_role.assume_role_policy.add_statements(
-                iam.PolicyStatement(
-                    effect=iam.Effect.ALLOW,
-                    principals=[iam.ArnPrincipal(cfg.reader.cribl_user_arn)],
-                    actions=["sts:AssumeRole"],
-                    conditions={
-                        "StringEquals": {
-                            "sts:ExternalId": cfg.reader.external_id
-                        }
-                    },
-                )
             )
             # S3 read on BOTH regional buckets (names are deterministic).
             bucket_arns: list[str] = []

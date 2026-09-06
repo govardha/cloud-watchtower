@@ -39,12 +39,21 @@ PY           := $(shell [ -x .venv/bin/python ] && echo .venv/bin/python || echo
 export WATCHTOWER_ACCOUNT = $(ACCOUNT)
 export AWS_PROFILE
 
+# Optional: narrow which logarchive regions are synthesized/deployed. Comma-
+# separated, must be a subset of infrastructure.yaml's regions. Handy for a
+# home-lab env that never bootstraps us-east-2:
+#   make deploy ACCOUNT=logarchive DEPLOY_REGIONS=us-east-1
+ifdef DEPLOY_REGIONS
+export WATCHTOWER_REGIONS = $(DEPLOY_REGIONS)
+endif
+
 .PHONY: help whoami venv synth diff deploy destroy bootstrap bootstrap-deployment
 
 help:
 	@echo "Targets: whoami | venv | synth | diff | deploy | destroy"
 	@echo "         bootstrap | bootstrap-deployment"
 	@echo "Set ACCOUNT=logarchive|sandbox|development|production|homelab (default: logarchive)"
+	@echo "Optional: DEPLOY_REGIONS=us-east-1[,us-east-2] narrows logarchive regions"
 	@echo "destroy also requires CONFIRM=<account>"
 
 venv:
