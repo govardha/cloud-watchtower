@@ -87,6 +87,66 @@ Permission policy (`CriblReaderRoleDefaultPolicyE40D9762`) — read + queue-drai
 Cribl's static keys never touch S3 directly — they are only used to assume this
 role, which is where the S3/SQS permissions live.
 
+> **Both sides must allow the assume.** The trust policy above is only the
+> *resource* side. The Cribl user also needs an *identity*-side
+> `sts:AssumeRole` grant on this role ARN, which lives in the audit account and
+> is **not** managed by this CDK app. See §4a.
+
+## 4a. Reader identity-side grant — audit account (NOT in CDK)
+
+Cross-account AssumeRole is authorized only when **both** ends allow it. This
+CDK app owns just the resource side (the role + its trust policy in
+`766997230140`). The identity side lives in the audit account `698777852125`
+and is managed manually there.
+
+- The `cribl-servicaccount` user has **no** policies of its own; all its
+  permissions come from the IAM group **`CriblLogProcessing`**.
+- That group's inline policy **`CriblAssumeRolePermissions`** carries the
+  `sts:AssumeRole` grants. It must include a statement for the watchtower role,
+  gated on the *watchtower* ExternalId (a separate statement from the older
+  CloudTrail→Cribl grant, which uses a different ExternalId — one condition
+  block cannot cover two different ExternalIds):
+
+```json
+{
+  "Sid": "AssumeWatchtowerCriblReader",
+  "Effect": "Allow",
+  "Action": "sts:AssumeRole",
+  "Resource": "arn:aws:iam::766997230140:role/watchtower-cribl-reader",
+  "Condition": {
+    "StringEquals": {
+      "sts:ExternalId": "watchtower-<redacted>"
+    }
+  }
+}
+```
+
+The pre-existing statement in the same policy (`AssumeCriblRoles`, for
+`arn:aws:iam::*:role/IAMCriblLogProcessingRole` with ExternalId
+`cribl-47f9f8c5-...`) is left untouched — the watchtower grant is additive.
+
+**Incident (2026-09-07).** Cribl Cloud reported:
+
+```
+User: arn:aws:iam::698777852125:user/cribl-servicaccount is not authorized to
+perform: sts:AssumeRole on resource:
+arn:aws:iam::766997230140:role/watchtower-cribl-reader
+```
+
+Root cause: the reader role was deployed (resource side correct), but the
+`CriblLogProcessing` group only granted assume on the old
+`IAMCriblLogProcessingRole`, not on `watchtower-cribl-reader`. Fixed by
+appending the `AssumeWatchtowerCriblReader` statement above via
+`iam put-group-policy` on group `CriblLogProcessing` (profile `admin-audit`,
+account `698777852125`). Verified the read-back contains both statements.
+
+Reminder: the Cribl S3 Source must send the **watchtower** ExternalId
+(`reader.external_id` in `infrastructure.yaml`), not the old
+`cribl-47f9f8c5-...` value, or the role's trust condition still rejects it.
+
+If this grant should ever be captured in IaC, the audit-account user/group would
+need to be brought under management (a larger change than this app's scope).
+
 ## 5. End-to-end trust flow
 
 ```mermaid
@@ -143,6 +203,17 @@ Checked with `iam get-role`, `iam list-role-policies`, `iam get-role-policy`:
 Both roles carry tags `project=cloud-watchtower`, `component=log-archive`, and
 `watchtower-account=<development|logarchive>`. `MaxSessionDuration` is 3600s on
 both. `RoleLastUsed` was empty on both at verification time (not yet exercised).
+
+### 6a. Identity-side grant added (2026-09-07)
+
+Authenticated `admin-audit` → `698777852125`. Confirmed the reader role's live
+trust policy in `766997230140` matched the CDK exactly, then traced the
+`cribl-servicaccount` user's permissions (no user-level policies; inherited from
+group `CriblLogProcessing`). Its inline policy `CriblAssumeRolePermissions`
+lacked any grant for `watchtower-cribl-reader`. Added the
+`AssumeWatchtowerCriblReader` statement (see §4a) via `iam put-group-policy` and
+verified the read-back contains both the old `AssumeCriblRoles` and the new
+statement. Both ends of the cross-account trust now agree.
 
 ## 7. Note on the older design doc
 
