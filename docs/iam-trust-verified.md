@@ -89,24 +89,28 @@ role, which is where the S3/SQS permissions live.
 
 ## 5. End-to-end trust flow
 
-```
- dev account (304232106942)                 logarchive account (766997230140)
- ┌───────────────────────────┐              ┌──────────────────────────────────────┐
- │ EKS pod / EC2 / ECS /      │              │  S3: watchtower-logarchive-ue1/ue2     │
- │ Lambda                     │  PutObject   │   bucket policy: Allow PutObject only   │
- │   │ assumes (service       │─────────────▶│   into ${aws:PrincipalAccount}/* for    │
- │   ▼  principal trust)      │  .../304232..│   org o-x82cglkqhs; explicit Deny on    │
- │ watchtower-writer-         │   /*         │   all DeleteObject*                     │
- │ development                │              │                                        │
- └───────────────────────────┘              │  S3 event -> SNS -> SQS (cribl queue)   │
-                                            │                                        │
- audit / Cribl (698777852125)               │  watchtower-cribl-reader                │
- ┌───────────────────────────┐              │   trusts user cribl-servicaccount       │
- │ IAM user                   │  AssumeRole  │   @698777852125 + ExternalId gate       │
- │ cribl-servicaccount        │─────────────▶│   -> GetObject/ListBucket + SQS consume │
- │  (keys only assume role,   │  +ExternalId │                                        │
- │   never S3 directly)       │              │                                        │
- └───────────────────────────┘              └──────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Dev["dev account (304232106942)"]
+        Writer["EKS pod / EC2 / ECS / Lambda\nassumes watchtower-writer-development\n(service-principal trust)"]
+    end
+
+    subgraph LA["logarchive account (766997230140)"]
+        S3[("S3: watchtower-logarchive-ue1/ue2\nbucket policy: Allow PutObject only into\n${aws:PrincipalAccount}/* for org o-x82cglkqhs;\nexplicit Deny on all DeleteObject*")]
+        SNS(["SNS"])
+        SQS[["SQS\ncribl queue"]]
+        Reader["watchtower-cribl-reader\ntrusts user cribl-servicaccount@698777852125\n+ ExternalId gate"]
+        S3 -- "ObjectCreated" --> SNS --> SQS
+    end
+
+    subgraph Audit["audit / Cribl (698777852125)"]
+        Cribl["IAM user cribl-servicaccount\nkeys only assume role, never S3 directly"]
+    end
+
+    Writer -->|"PutObject, confined to .../304232106942/*"| S3
+    Cribl -->|"sts:AssumeRole + ExternalId"| Reader
+    Reader -->|"GetObject / ListBucket"| S3
+    Reader -->|"ReceiveMessage / DeleteMessage"| SQS
 ```
 
 Why two models:
