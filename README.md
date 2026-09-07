@@ -319,11 +319,107 @@ behind it and the EKS clusters do:
 | Actions | `s3:PutObject`, `s3:AbortMultipartUpload`, `s3:GetBucketLocation` — **no delete**, in both cases |
 
 `EksPodIdentity`'s trust statement is the only one that also grants
-`sts:TagSession` (Pod Identity requires it). Wiring a *new* EKS cluster onto
-an already-onboarded account needs **no CDK change at all** — just one more
-`CfnPodIdentityAssociation` (or `aws eks create-pod-identity-association`)
-binding `(cluster, namespace, service_account)` to the existing role ARN,
-owned on the `cluster-cauldron` side.
+`sts:TagSession` (Pod Identity requires it).
+
+#### 4.3.1 EKS write-path walkthrough
+
+The role and its policy (`WorkloadWriterStack`) are only half the story — a
+role existing doesn't mean any pod can use it. The other half, **Pod
+Identity**, is a separate binding step owned on the `cluster-cauldron` side:
+
+```mermaid
+flowchart TB
+    subgraph EKS["EKS cluster (workload account)"]
+        Pod["splunk-otel-s3-writer pod\nServiceAccount: splunk-otel-s3-writer\nnamespace: splunk-otel (plain SA, no annotation)"]
+        Agent["eks-pod-identity-agent\nDaemonSet on every node"]
+        Assoc["Pod Identity Association\n(cluster, namespace, service_account) -&gt; role ARN"]
+        Pod -.->|"credential lookup via local endpoint"| Agent
+        Agent -->|"matches"| Assoc
+    end
+
+    subgraph IAM["IAM (workload account)"]
+        Role["watchtower-writer-&lt;account&gt; role\ntrusts pods.eks.amazonaws.com"]
+    end
+
+    Assoc -->|"binds to"| Role
+    Agent -->|"injects short-lived creds, no keys, no IRSA"| Pod
+    Pod -->|"out_s3 PutObject to &lt;account_id&gt;/eks/&lt;cluster&gt;/.../&lt;namespace&gt;/*.gz"| S3[("S3\nwatchtower-logarchive-&lt;region&gt;-766997230140")]
+
+    style Assoc fill:#7a4b8a,color:#fff
+    style Role fill:#274472,color:#fff
+    style S3 fill:#1f6f43,color:#fff
+```
+
+The **collector → Fluent Bit → `rewrite_tag` → `out_s3`** pipeline upstream of
+the pod is byte-for-byte the same code as the on-prem path in §3.1 — same
+chart, same `otlp_k8s_tag.lua`, same Fluent Bit config file. The **only**
+things that differ between on-prem and EKS are the three rows already called
+out in the table above (identity, credential source, prefix), plus one more:
+Fluent Bit needs a per-cluster `$AWS_ACCOUNT_ID` env var (a cluster lives in
+exactly one account for its whole life, so this is set once, not per-app).
+
+**Onboarding a new EKS cluster onto an already-onboarded account** needs
+**zero CDK changes** — the role, trust policy, and identity policy already
+exist and are shared by every cluster in that account. Just add one Pod
+Identity Association:
+
+```bash
+# one-off via CLI
+aws eks create-pod-identity-association \
+  --cluster-name eks-sandbox \
+  --namespace splunk-otel \
+  --service-account splunk-otel-s3-writer \
+  --role-arn arn:aws:iam::621648307412:role/watchtower-writer-sandbox \
+  --profile admin-sandbox --region us-east-1
+```
+
+or, checked into the `eks/cdk` scaffold as a construct (`cluster-cauldron`,
+not this repo):
+
+```python
+from aws_cdk import aws_eks as eks
+
+eks.CfnPodIdentityAssociation(
+    self,
+    "WatchtowerLogWriterAssociation",
+    cluster_name=self.cluster.cluster_name,
+    namespace="splunk-otel",
+    service_account="splunk-otel-s3-writer",
+    role_arn=writer_role_arn,  # arn:aws:iam::<account_id>:role/watchtower-writer-<account>
+)
+```
+
+The Fluent Bit `out_s3` block only changes in two lines versus the on-prem
+one shown in §3.1 — no credentials config (Pod Identity injects them) and the
+prefix:
+
+```ini
+[OUTPUT]
+    Name                  s3
+    Match                 eks.*
+    Bucket                watchtower-logarchive-us-east-1-766997230140
+    Region                us-east-1
+    use_put_object        On
+    s3_key_format         /$AWS_ACCOUNT_ID/eks/$TAG[1]/%Y/%m/%d/$TAG[2]/$UUID.gz
+    s3_key_format_tag_delimiters .
+    # NO creds env — Pod Identity injects them; SDK resolves automatically.
+```
+
+Prereqs already assumed in place: the `eks-pod-identity-agent` EKS add-on
+installed on the cluster, and a **plain** `splunk-otel-s3-writer`
+ServiceAccount (no IRSA annotation needed — Pod Identity doesn't use OIDC
+federation the way IRSA does).
+
+**Full source of truth for this walkthrough:**
+`cluster-cauldron/docs/watchtower-pod-identity.md` — it also covers the
+two-phase test plan (validate on-prem first, then repeat on EKS with the
+same app) that this design was built around.
+
+#### 4.3.2 Home-lab write path
+
+Already fully diagrammed and walked through in [§3.1](#31-whats-live-today)
+and [§3.2](#32-how-the-homelab-cluster-bootstraps-this-cross-repo) — the
+`HomelabWriterStack` IAM user is the AWS-side half of that same pipeline.
 
 ### 4.4 Read path: SNS → SQS → Cribl reader role
 
