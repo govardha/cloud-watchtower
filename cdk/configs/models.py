@@ -59,6 +59,13 @@ class LogArchiveConfig:
     sse: str = "S3"
     versioning: bool = False
     org_id: str = ""
+    # Optional carve-out: an IAM principal-ARN pattern (wildcards allowed —
+    # this is used in an `aws:PrincipalArn` policy CONDITION, not the Principal
+    # field, so `*` is legal here) that is EXCLUDED from the bucket-wide
+    # `deny-delete-everyone` statement. Intended solely for an admin cleanup
+    # role. Empty string = no carve-out (writers-can-never-delete stays
+    # absolute for every principal). See docs/iam-s3-design.md §5.
+    admin_delete_principal_arn_pattern: str = ""
     reader: ReaderConfig = field(default_factory=ReaderConfig)
 
 

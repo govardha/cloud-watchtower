@@ -111,6 +111,22 @@ class LogArchiveStack(Stack):
                 },
             )
         )
+        # Explicit delete deny for everyone — the "writers can never delete"
+        # backstop, enforced independent of any identity policy. A DENY here
+        # overrides any identity-based ALLOW, so an admin cleanup capability
+        # cannot be granted by an identity policy alone: it must be carved out
+        # HERE, as a condition on this very statement. When
+        # `admin_delete_principal_arn_pattern` is set, that principal is
+        # EXCLUDED from the deny via `aws:PrincipalArn`/`StringNotLike` (a
+        # condition — where ARN wildcards ARE legal, unlike the Principal
+        # field). Every other principal, including all writers, stays denied.
+        delete_deny_conditions: dict = {}
+        if cfg.admin_delete_principal_arn_pattern:
+            delete_deny_conditions = {
+                "StringNotLike": {
+                    "aws:PrincipalArn": cfg.admin_delete_principal_arn_pattern
+                }
+            }
         bucket.add_to_resource_policy(
             iam.PolicyStatement(
                 sid="deny-delete-everyone",
@@ -118,6 +134,7 @@ class LogArchiveStack(Stack):
                 principals=[iam.AnyPrincipal()],
                 actions=["s3:DeleteObject", "s3:DeleteObjectVersion"],
                 resources=[f"{bucket.bucket_arn}/*"],
+                conditions=delete_deny_conditions or None,
             )
         )
 
