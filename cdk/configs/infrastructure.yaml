@@ -29,6 +29,11 @@ globals:
     sse: "S3"                              # AES256; SSE-KMS is the work upgrade
     versioning: false
     org_id: "o-x82cglkqhs"
+    # Admin cleanup carve-out: this principal-ARN pattern is EXCLUDED from the
+    # bucket-wide delete deny (used in an aws:PrincipalArn condition, so the
+    # trailing * is legal — unlike the Principal field). Only the admin-logarchive
+    # SSO role can delete objects; every writer identity stays delete-denied.
+    admin_delete_principal_arn_pattern: "arn:aws:iam::766997230140:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_admin-logarchive*"
     reader:
       role_name: "watchtower-cribl-reader"
       cribl_user_arn: "arn:aws:iam::698777852125:user/cribl-servicaccount"
