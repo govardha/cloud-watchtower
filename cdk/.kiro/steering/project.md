@@ -90,7 +90,10 @@ cdk/
 - Buckets are `RETAIN` on stack delete, block-public, force-HTTPS, SSE-S3,
   30-day object expiry, 7-day incomplete-multipart abort.
 - Bucket policy: org-wide write-into-own-`{PrincipalAccount}`-prefix + an
-  explicit delete deny for everyone.
+  explicit delete deny for everyone, except one carved-out principal-ARN
+  pattern (`admin_delete_principal_arn_pattern`, currently the
+  `AdministratorAccess` SSO role) for manual admin cleanup — every writer
+  identity stays delete-denied (design doc §5).
 - SSE-KMS is a deliberate **future** upgrade, not yet implemented (plan §10).
 
 ## Reference docs
