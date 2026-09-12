@@ -147,12 +147,23 @@ one principal-ARN pattern via `aws:PrincipalArn` / `StringNotLike`
 (`admin_delete_principal_arn_pattern` in `LogArchiveConfig`, empty by
 default). This is a policy *condition*, not the `Principal` field, so the
 trailing `*` is legal — it spans the AdministratorAccess SSO permission
-set's rotating provisioning suffix and session name, not multiple
-permission sets. It is currently set to the `AdministratorAccess` SSO role
-in the logarchive account, giving that role — and only that role — a
-permanent way to delete objects for manual cleanup. Every writer identity
-(workload roles, the homelab user) stays delete-denied with no exception.
-Deployed and verified live on `us-east-1`; `us-east-2` pending `watchtwr26`
+set's rotating provisioning suffix, which differs per account (e.g.
+`..._a07f3c47e8bbe124` in logarchive vs `..._b19ef3e3727fae14` in audit).
+
+For an assumed role, `aws:PrincipalArn` resolves to the **IAM role ARN**
+(`arn:aws:iam::<account>:role/...`), never the STS assumed-role session ARN
+(`arn:aws:sts::<account>:assumed-role/<role>/<session-name>`) — [AWS
+explicitly documents this](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-principalarn)
+and warns against using the session ARN here. So the session/login name
+(e.g. an SSO user's email) never appears in the value being matched — the
+pattern matches every session that assumes the `AdministratorAccess` role,
+not one specific login.
+
+It is currently set to the `AdministratorAccess` SSO role in the
+logarchive account, giving that role — and only that role — a permanent
+way to delete objects for manual cleanup. Every writer identity (workload
+roles, the homelab user) stays delete-denied with no exception. Deployed
+and verified live on `us-east-1`; `us-east-2` pending `watchtwr26`
 bootstrap.
 
 **Cribl reader role** — deferred. High-level shape only (already proven
