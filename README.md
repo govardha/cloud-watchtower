@@ -719,6 +719,10 @@ Deliberately deferred, not blocking anything above:
 - [`docs/cribl-s3.md`](docs/cribl-s3.md) — vendored Cribl documentation for
   its S3 Source (SQS notifications, AssumeRole chains, auth options) —
   useful when configuring the actual Cribl Stream worker group.
+- [`docs/work-deployment-runbook.md`](docs/work-deployment-runbook.md) —
+  step-by-step checklist for replicating this whole design in a different
+  AWS Organization (e.g. a work environment), from `cdk bootstrap` through
+  wiring up Cribl, in both regions from day one.
 - `cdk/CLAUDE.md`, `cdk/.kiro/steering/*.md` — agent-facing conventions for
   changing the CDK code; kept in sync with the code, read before editing
   stacks.
