@@ -43,10 +43,24 @@ globals:
       role_name: "watchtower-cribl-reader"
       cribl_user_arn: "arn:aws:iam::698777852125:user/cribl-servicaccount"
       external_id: "watchtower-2675e497-b719-409b-b81a-57e9ca59976e"
+      # Backup-DC Cribl identity — same role/principal, distinct ExternalId.
+      # Both DCs poll concurrently (active-active); this value goes into
+      # the backup DC's Cribl S3 Source config, primary keeps the value
+      # above — purely so CloudTrail shows the per-DC split.
+      backup_external_id: "watchtower-38d78d86-f98b-40a0-9ed6-ed1ede32c771"
       queue_visibility_seconds: 300
       queue_retention_seconds: 1209600     # 14 days
       dlq_max_receive_count: 5
       raw_message_delivery: true
+
+    # Alarms when a reader queue backs up, meaning nobody is currently
+    # draining it. With both DCs active-active, that means BOTH have
+    # stopped consuming — a total-outage signal, not a per-DC one.
+    alerting:
+      notification_email: "outing-grommet-9h@icloud.com"
+      queue_backlog_threshold_seconds: 3600   # 60 min — home-lab, not paged 24/7
+      queue_backlog_period_seconds: 300
+      queue_backlog_evaluation_periods: 1
 
   writer:
     role_name_pattern: "watchtower-writer-{account}"

@@ -24,6 +24,8 @@ from aws_cdk import (
     Duration,
     RemovalPolicy,
     Stack,
+    aws_cloudwatch as cloudwatch,
+    aws_cloudwatch_actions as cw_actions,
     aws_iam as iam,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
@@ -175,6 +177,43 @@ class LogArchiveStack(Stack):
         )
         self.queue = queue
 
+        # ------------------------------------------------------------------
+        # Queue backlog alarm. Both DCs poll active-active, so this only
+        # trips when NEITHER is consuming — a total-outage signal, not a
+        # per-DC one. One topic + alarm per region (a CloudWatch alarm can
+        # only target an SNS topic in its own region).
+        # ------------------------------------------------------------------
+        alert_topic = sns.Topic(
+            self,
+            "QueueBacklogAlertTopic",
+            topic_name=f"watchtower-logarchive-alerts-{short}",
+        )
+        if cfg.alerting.notification_email:
+            alert_topic.add_subscription(
+                sns_subs.EmailSubscription(cfg.alerting.notification_email)
+            )
+        backlog_alarm = cloudwatch.Alarm(
+            self,
+            "CriblReaderQueueBacklogAlarm",
+            alarm_name=f"watchtower-cribl-reader-backlog-{short}",
+            alarm_description=(
+                "Reader queue has an undrained message older than the "
+                "threshold — both DCs' Cribl instances appear to have "
+                "stopped consuming."
+            ),
+            metric=queue.metric_approximate_age_of_oldest_message(
+                period=Duration.seconds(cfg.alerting.queue_backlog_period_seconds),
+            ),
+            threshold=cfg.alerting.queue_backlog_threshold_seconds,
+            evaluation_periods=cfg.alerting.queue_backlog_evaluation_periods,
+            comparison_operator=(
+                cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD
+            ),
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        backlog_alarm.add_alarm_action(cw_actions.SnsAction(alert_topic))
+        CfnOutput(self, "QueueBacklogAlertTopicArn", value=alert_topic.topic_arn)
+
         # S3 -> SNS notification (ObjectCreated), and SNS -> SQS subscription.
         bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
@@ -200,6 +239,9 @@ class LogArchiveStack(Stack):
             # the ExternalId (trust statements are OR'd, so the unconditioned
             # one still permits assume). Condition the principal so there is a
             # single statement that requires the ExternalId. See git history.
+            external_ids = [cfg.reader.external_id]
+            if cfg.reader.backup_external_id:
+                external_ids.append(cfg.reader.backup_external_id)
             reader_role = iam.Role(
                 self,
                 "CriblReaderRole",
@@ -207,7 +249,7 @@ class LogArchiveStack(Stack):
                 assumed_by=iam.ArnPrincipal(
                     cfg.reader.cribl_user_arn
                 ).with_conditions(
-                    {"StringEquals": {"sts:ExternalId": cfg.reader.external_id}}
+                    {"StringEquals": {"sts:ExternalId": external_ids}}
                 ),
                 description=(
                     "Assumed by the audit-account Cribl service account to "
@@ -265,6 +307,17 @@ class LogArchiveStack(Stack):
                 value=cfg.reader.external_id,
                 description="External ID for the Cribl S3 Source AssumeRole",
             )
+            if cfg.reader.backup_external_id:
+                CfnOutput(
+                    self,
+                    "CriblBackupExternalId",
+                    value=cfg.reader.backup_external_id,
+                    description=(
+                        "External ID for the backup-DC Cribl S3 Source "
+                        "AssumeRole (active-active alongside primary — "
+                        "for per-DC attribution in CloudTrail)"
+                    ),
+                )
 
         # ------------------------------------------------------------------
         # Outputs — the values to paste into Cribl's S3 Source (per region).

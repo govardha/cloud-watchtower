@@ -29,12 +29,41 @@ class ReaderConfig:
         "arn:aws:iam::698777852125:user/cribl-servicaccount"
     )
     external_id: str = ""
+    # Optional second ExternalId for the backup-DC Cribl instance. Both DCs
+    # poll the same queues concurrently (active-active — downstream Splunk
+    # is a clustered index, so it doesn't matter which DC's Cribl read a
+    # given object; SQS's competing-consumer model just splits the work).
+    # Same role, same trusted principal (cribl_user_arn) — the trust
+    # condition accepts EITHER value (IAM StringEquals on a list is OR'd),
+    # so CloudTrail's AssumeRole events still show the per-DC split, and
+    # either identity can be revoked independently. Empty = only the
+    # primary identity is configured.
+    backup_external_id: str = ""
     # SQS tuning — defaults match the proven CloudTrail->Cribl queue.
     queue_visibility_seconds: int = 300
     queue_retention_seconds: int = 1209600  # 14 days
     dlq_max_receive_count: int = 5
     # SNS->SQS raw message delivery (see plan §9 open item — confirm vs Cribl).
     raw_message_delivery: bool = True
+
+
+@dataclass
+class AlertingConfig:
+    """SQS backlog alarm.
+
+    ``ApproximateAgeOfOldestMessage`` on the reader queue crossing the
+    threshold means nobody is currently draining it. With both DCs polling
+    active-active, that means BOTH have stopped consuming (a single DC
+    dropping off is absorbed silently — the other keeps draining the
+    queue) — i.e. this is a total-outage signal, not a per-DC one. One
+    alarm + one SNS topic per region (a CloudWatch alarm can only target an
+    SNS topic in its own region).
+    """
+
+    notification_email: str = ""
+    queue_backlog_threshold_seconds: int = 1200
+    queue_backlog_period_seconds: int = 300
+    queue_backlog_evaluation_periods: int = 1
 
 
 @dataclass
@@ -67,6 +96,7 @@ class LogArchiveConfig:
     # absolute for every principal). See docs/iam-s3-design.md §5.
     admin_delete_principal_arn_pattern: str = ""
     reader: ReaderConfig = field(default_factory=ReaderConfig)
+    alerting: AlertingConfig = field(default_factory=AlertingConfig)
 
 
 @dataclass
