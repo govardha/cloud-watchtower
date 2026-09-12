@@ -123,7 +123,12 @@ policy variable so no per-account or per-app statement is ever added:
       "Effect": "Deny",
       "Principal": "*",
       "Action": "s3:DeleteObject*",
-      "Resource": "arn:aws:s3:::watchtower-logarchive/*"
+      "Resource": "arn:aws:s3:::watchtower-logarchive/*",
+      "Condition": {
+        "StringNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::766997230140:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_*"
+        }
+      }
     }
   ]
 }
@@ -136,6 +141,30 @@ not just trusted from the identity-policy side. Any AWS Organizations
 member account can write, but only into its own prefix. No statement here
 is ever touched when a workload account, app, or cluster is added or
 removed.
+
+**Admin delete carve-out** — the `deny-delete-everyone` statement excludes
+one principal-ARN pattern via `aws:PrincipalArn` / `StringNotLike`
+(`admin_delete_principal_arn_pattern` in `LogArchiveConfig`, empty by
+default). This is a policy *condition*, not the `Principal` field, so the
+trailing `*` is legal — it spans the AdministratorAccess SSO permission
+set's rotating provisioning suffix, which differs per account (e.g.
+`..._a07f3c47e8bbe124` in logarchive vs `..._b19ef3e3727fae14` in audit).
+
+For an assumed role, `aws:PrincipalArn` resolves to the **IAM role ARN**
+(`arn:aws:iam::<account>:role/...`), never the STS assumed-role session ARN
+(`arn:aws:sts::<account>:assumed-role/<role>/<session-name>`) — [AWS
+explicitly documents this](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#condition-keys-principalarn)
+and warns against using the session ARN here. So the session/login name
+(e.g. an SSO user's email) never appears in the value being matched — the
+pattern matches every session that assumes the `AdministratorAccess` role,
+not one specific login.
+
+It is currently set to the `AdministratorAccess` SSO role in the
+logarchive account, giving that role — and only that role — a permanent
+way to delete objects for manual cleanup. Every writer identity (workload
+roles, the homelab user) stays delete-denied with no exception. Deployed
+and verified live on `us-east-1`; `us-east-2` pending `watchtwr26`
+bootstrap.
 
 **Cribl reader role** — deferred. High-level shape only (already proven
 against CloudTrail, will be reused, not redesigned): an IAM user in

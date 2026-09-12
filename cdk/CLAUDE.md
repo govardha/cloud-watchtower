@@ -103,6 +103,15 @@ Direct CDK (rarely needed): `cdk -c account=<name> synth`.
   no delete anywhere. Trust-policy `Sid`s must be **alphanumeric**. The
   home-lab writer is an IAM **user** (not a role), same rules: write-only,
   explicit resources, no delete.
+- **Delete deny has exactly one carve-out:** the bucket-wide
+  `deny-delete-everyone` statement excludes one principal-ARN pattern
+  (`LogArchiveConfig.admin_delete_principal_arn_pattern`, via an
+  `aws:PrincipalArn` / `StringNotLike` condition — legal there even though a
+  trailing `*` is not legal in the `Principal` field itself). Currently
+  pointed at the `AdministratorAccess` SSO role, for manual cleanup only.
+  Never widen this pattern or add a second one without being asked — every
+  writer identity must stay delete-denied with no exception. See
+  `docs/iam-s3-design.md` §5.
 - **ExternalId must be bound to the principal at role creation** via
   `ArnPrincipal(...).with_conditions({"StringEquals": {"sts:ExternalId": ...}})`.
   Do **not** use bare `assumed_by=ArnPrincipal(...)` and then append a

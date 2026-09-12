@@ -302,8 +302,14 @@ One bucket per region, named `watchtower-logarchive-<region>-766997230140`:
     account ID, resolved server-side. This is why **onboarding a new
     workload account never touches this bucket policy** — the resource-side
     boundary already covers any org member.
-  - `Deny s3:DeleteObject*` for everyone, unconditionally — the backstop for
-    "writers can never delete," enforced independent of any identity policy.
+  - `Deny s3:DeleteObject*` for everyone — the backstop for "writers can
+    never delete," enforced independent of any identity policy — **except**
+    one carved-out principal-ARN pattern
+    (`admin_delete_principal_arn_pattern`, an `aws:PrincipalArn` /
+    `StringNotLike` condition on the deny). Currently set to the
+    `AdministratorAccess` SSO role in the logarchive account, so that role
+    alone can delete for manual cleanup; every writer identity stays
+    delete-denied. See [iam-s3-design.md §5](docs/iam-s3-design.md).
 
 ### 4.3 Write path: IAM writer roles
 

@@ -31,13 +31,13 @@ globals:
     org_id: "o-x82cglkqhs"
     # Admin cleanup carve-out: this principal-ARN pattern is EXCLUDED from the
     # bucket-wide delete deny (used in an aws:PrincipalArn condition, so the
-    # trailing * is legal — unlike the Principal field). Only the admin-logarchive
-    # Admin cleanup carve-out: this principal-ARN pattern is EXCLUDED from the
-    # bucket-wide delete deny (used in an aws:PrincipalArn condition, so the
     # trailing * is legal — it spans the SSO permission set's rotating
-    # provisioning suffix and session name, not multiple permission sets).
-    # Only the AdministratorAccess SSO role can delete objects; every writer
-    # identity stays delete-denied.
+    # provisioning suffix, which differs per account). For an assumed role,
+    # aws:PrincipalArn is the IAM role ARN, NOT the STS assumed-role session
+    # ARN — the session/login name never appears in it, so this matches
+    # every session under the AdministratorAccess SSO role, not just one.
+    # Only that role can delete objects; every writer identity stays
+    # delete-denied.
     admin_delete_principal_arn_pattern: "arn:aws:iam::766997230140:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_*"
     reader:
       role_name: "watchtower-cribl-reader"

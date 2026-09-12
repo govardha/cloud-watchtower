@@ -38,7 +38,10 @@ Follow these when writing or changing Python/CDK code in this repo.
   resources stay explicit.
 - Writer role is **write-only** (`s3:PutObject`, `s3:AbortMultipartUpload`).
   No delete actions anywhere on the writer side; the bucket policy has an
-  explicit delete deny as backstop.
+  explicit delete deny as backstop, with exactly one carve-out
+  (`admin_delete_principal_arn_pattern`, currently the `AdministratorAccess`
+  SSO role, via `aws:PrincipalArn`/`StringNotLike`) for manual admin
+  cleanup — never widen it or add a second one without being asked.
 - Trust-policy `Sid`s must be **alphanumeric** (CloudFormation rejects others —
   see the fix commit on the scaffold branch).
 - **Bind `sts:ExternalId` to the principal at role creation** —
